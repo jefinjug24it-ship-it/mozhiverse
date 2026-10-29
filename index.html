@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MozhiVerse | Connect Beyond Languages</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b1120;
+      color: #f1f5f9;
+    }
+    header {
+      text-align: center;
+      padding: 32px 15px;
+      background: linear-gradient(135deg, #123c48, #172554);
+    }
+    h1 { color: #5eead4; font-size: 38px; margin: 0; }
+    header p { color: #cbd5e1; }
+    .container { max-width: 850px; margin: 30px auto; padding: 16px; }
+    .card {
+      background: #151e30;
+      padding: 24px;
+      border: 1px solid #29374c;
+      border-radius: 16px;
+      margin-bottom: 20px;
+    }
+    h2 { color: #5eead4; margin-top: 0; }
+    label { display: block; margin: 15px 0 8px; color: #cbd5e1; }
+    input, select, textarea {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #0b1120;
+      color: white;
+      font-size: 15px;
+    }
+    textarea { min-height: 100px; resize: vertical; }
+    .languages { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    button {
+      padding: 12px 16px;
+      margin: 14px 5px 0 0;
+      border: 0;
+      border-radius: 8px;
+      background: #14b8a6;
+      color: #042f2e;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { background: #5eead4; }
+    .secondary { background: #334155; color: white; }
+    #status { color: #5eead4; }
+    .muted { color: #94a3b8; font-size: 13px; }
+    .message {
+      background: #0b1120;
+      border: 1px solid #334155;
+      padding: 14px;
+      border-radius: 10px;
+      margin-top: 12px;
+      overflow-wrap: anywhere;
+    }
+    footer { text-align: center; padding: 24px; color: #94a3b8; }
+    @media (max-width: 550px) {
+      .languages { grid-template-columns: 1fr; }
+      h1 { font-size: 30px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🌍 MozhiVerse</h1>
+    <p>Different Languages. Different Abilities. One Conversation.</p>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>💬 Start a Conversation</h2>
+
+      <label for="speaker">Your Name</label>
+      <input id="speaker" placeholder="Enter your name">
+
+      <div class="languages">
+        <div>
+          <label for="sourceLang">Speak or type in</label>
+          <select id="sourceLang">
+            <option value="ta">Tamil</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div>
+          <label for="targetLang">Translate into</label>
+          <select id="targetLang">
+            <option value="en">English</option>
+            <option value="ta">Tamil</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="original">Your Message</label>
+      <textarea id="original" placeholder="Type your message here..."></textarea>
+      <button id="voiceButton" onclick="startVoice()">🎙️ Speak</button>
+      <button id="translateButton" onclick="translateMessage()">🌐 Translate &amp; Send</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card">
+      <h2>🛡️ MeaningGuard</h2>
+      <p class="muted">Review and correct your translation before sharing.</p>
+      <label for="translated">Translated Message (Editable)</label>
+      <textarea id="translated" placeholder="Translation will appear here..."></textarea>
+      <button onclick="saveCorrection()">Save Correction</button>
+      <button class="secondary" onclick="listenTranslation()">🔊 Listen</button>
+    </section>
+
+    <section class="card">
+      <h2>🕘 Conversation History</h2>
+      <div id="history"></div>
+      <button class="secondary" onclick="clearHistory()">Clear History</button>
+    </section>
+  </main>
+
+  <footer>
+    <p>Made with ❤️ for accessible communication</p>
+    <p class="muted">MozhiVerse — Connect Beyond Language Barriers</p>
+  </footer>
+
+  <script>
+    const STORAGE_KEY = "mozhiverseMessages";
+    let messages = [];
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      if (Array.isArray(saved)) messages = saved;
+    } catch (error) {
+      messages = [];
+    }
+
+    function setStatus(message) {
+      document.getElementById("status").textContent = message;
+    }
+
+    function saveHistory() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+        renderHistory();
+      } catch (error) {
+        setStatus("Unable to save history in this browser.");
+      }
+    }
+
+    async function translateMessage() {
+      const original = document.getElementById("original").value.trim();
+      const source = document.getElementById("sourceLang").value;
+      const target = document.getElementById("targetLang").value;
+      const button = document.getElementById("translateButton");
+
+      if (!original) {
+        setStatus("Please type a message first.");
+        return;
+      }
+      if (source === target) {
+        document.getElementById("translated").value = original;
+        setStatus("Choose two different languages.");
+        return;
+      }
+
+      button.disabled = true;
+      setStatus("Translating...");
+
+      try {
+        const params = new URLSearchParams({
+          q: original,
+          langpair: source + "|" + target
+        });
+
+        const response = await fetch(
+          "https://api.mymemory.translated.net/get?" + params.toString()
+        );
+        if (!response.ok) throw new Error("Translation service unavailable.");
+
+        const data = await response.json();
+        if (Number(data.responseStatus) !== 200) {
+          throw new Error("Translation failed. Check your internet or quota.");
+        }
+
+        const decoder = document.createElement("textarea");
+        decoder.innerHTML = data.responseData.translatedText;
+        const translation = decoder.value;
+
+        document.getElementById("translated").value = translation;
+
+        messages.unshift({
+          name: document.getElementById("speaker").value.trim() || "Guest",
+          original,
+          translation,
+          source,
+          target,
+          time: new Date().toLocaleString()
+        });
+
+        messages = messages.slice(0, 30);
+        saveHistory();
+        setStatus("Translation received. Please check its meaning.");
+      } catch (error) {
+        setStatus(error.message || "Translation failed. Please try again.");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function saveCorrection() {
+      const original = document.getElementById("original").value.trim();
+      const translation = document.getElementById("translated").value.trim();
+
+      if (!original || !translation) {
+        setStatus("Enter both the original and translated message.");
+        return;
+      }
+
+      const source = document.getElementById("sourceLang").value;
+      const target = document.getElementById("targetLang").value;
+
+      const existing = messages.find(item =>
+        item.original === original &&
+        item.source === source &&
+        item.target === target
+      );
+
+      if (existing) {
+        existing.translation = translation;
+        existing.corrected = true;
+        existing.time = new Date().toLocaleString();
+      } else {
+        messages.unshift({
+          name: document.getElementById("speaker").value.trim() || "Guest",
+          original,
+          translation,
+          source,
+          target,
+          corrected: true,
+          time: new Date().toLocaleString()
+        });
+      }
+
+      messages = messages.slice(0, 30);
+      saveHistory();
+      setStatus("Correction saved!");
+    }
+
+    function startVoice() {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        setStatus("Voice input unavailable. Try Chrome or type your message.");
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang =
+        document.getElementById("sourceLang").value === "ta"
+          ? "ta-IN" : "en-US";
+      recognition.interimResults = false;
+
+      setStatus("Listening... Speak now.");
+
+      recognition.onresult = event => {
+        document.getElementById("original").value =
+          event.results[0][0].transcript;
+        setStatus("Voice captured. Click Translate & Send.");
+      };
+
+      recognition.onerror = event => {
+        setStatus("Voice input error: " + event.error);
+      };
+
+      recognition.start();
+    }
+
+    function listenTranslation() {
+      const text = document.getElementById("translated").value.trim();
+      if (!text) {
+        setStatus("Translate a message first.");
+        return;
+      }
+      if (!("speechSynthesis" in window)) {
+        setStatus("Voice playback is not supported in this browser.");
+        return;
+      }
+
+      speechSynthesis.cancel();
+      const speech = new SpeechSynthesisUtterance(text);
+      speech.lang =
+        document.getElementById("targetLang").value === "ta"
+          ? "ta-IN" : "en-US";
+      speechSynthesis.speak(speech);
+      setStatus("Playing translated message...");
+    }
+
+    function renderHistory() {
+      const container = document.getElementById("history");
+      container.replaceChildren();
+
+      if (messages.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "muted";
+        empty.textContent = "No conversations yet.";
+        container.appendChild(empty);
+        return;
+      }
+
+      messages.forEach(item => {
+        const card = document.createElement("div");
+        card.className = "message";
+
+        const name = document.createElement("strong");
+        name.textContent = item.name || "Guest";
+
+        const original = document.createElement("p");
+        original.textContent = "Original: " + item.original;
+
+        const translated = document.createElement("p");
+        translated.textContent = "Translation: " + item.translation;
+
+        const time = document.createElement("p");
+        time.className = "muted";
+        time.textContent = (item.time || "") +
+          (item.corrected ? " · Corrected" : "");
+
+        card.append(name, original, translated, time);
+        container.appendChild(card);
+      });
+    }
+
+    function clearHistory() {
+      if (!confirm("Clear all conversation history?")) return;
+      messages = [];
+      saveHistory();
+      setStatus("History cleared.");
+    }
+
+    renderHistory();
+  </script>
+</body>
+</html>
+
+
+
